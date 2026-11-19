@@ -14,7 +14,10 @@ function* generator_example() {
 
 const iterator = generator_example()
 
-// 【为了让yield return的值等于yield后面的值，需要把value给下一个next函数传入参数】
+// 【为了让yield return的值等于yield后面的值，需要把value给下一个next函数传入参数。】
+// 第一个next不需要传递参数，因为第一个next不会执行到第一个yield前的逻辑
+// n个yield，用n+1个next可以执行完毕。
+
 
 // 第一次开始执行，执行的是：1;
 const { value: value1, done: done1 } = iterator.next() // 得到的value1就是1，传递给下面第二次，使得a为1
@@ -33,7 +36,15 @@ const { value: value4, done: done4 } = iterator.next(value3) // 得到的value4�
 console.log('第四次', value4, done4)
 
 
-
+// 【上述是很不优雅的写法，可以用循环来写，等到done为true就结束循环】
+let curDone = false;
+let curValue = undefined;
+while (!curDone) {
+    const { value, done } = iterator.next(curValue)
+    console.log('while循环内的：', value, done)
+    curValue = value
+    curDone = done
+}
 
 
 
@@ -52,7 +63,7 @@ const iteratorFactory = {
             // 用户给next传入的参数，即yield的接受值者的值，存在这里
             sent: undefined,
             // 结束调度
-            stop(){
+            stop() {
                 this.done = true
             }
         }
@@ -60,7 +71,7 @@ const iteratorFactory = {
             next(curValue) {
                 context.sent = curValue
                 const newValue = executor(context)
-                return {value: newValue, done: context.done}
+                return { value: newValue, done: context.done }
             }
         }
         return iterator
@@ -103,16 +114,16 @@ function real_generator_example() {
                     return 3
 
                 // 第四次开始执行，执行的是：const c = 和 console.log(c)
-                case 6:
+                case 9:
                     // 为yield的接受值者赋值
                     const c = context.sent
                     // 执行用户函数
                     console.log(c)
                     // 开始往下走
-                    context.next = 9
-                
+                    context.next = 12
+
                 // 结束的时候，调用stop，表示done被赋值为true
-                case 9:
+                case 12:
                 case 'end':
                     return context.stop()
             }
@@ -126,18 +137,88 @@ function real_generator_example() {
 // ======================4.用于测试和验证-开始======================
 const it = real_generator_example()
 
-const { value: v1, done: d1 } = it.next()
-console.log('自己写的-第一次', v1, d1)
+// const { value: v1, done: d1 } = it.next()
+// console.log('自己写的-第一次', v1, d1)
 
-const { value: v2, done: d2 } = it.next(v1)
-console.log('自己写的-第二次', v2, d2)
+// const { value: v2, done: d2 } = it.next(v1)
+// console.log('自己写的-第二次', v2, d2)
 
-const { value: v3, done: d3 } = it.next(v2)
-console.log('自己写的-第三次', v3, d3)
+// const { value: v3, done: d3 } = it.next(v2)
+// console.log('自己写的-第三次', v3, d3)
 
-const { value: v4, done: d4 } = it.next(v3)
-console.log('自己写的-第四次', v4, d4)
+// const { value: v4, done: d4 } = it.next(v3)
+// console.log('自己写的-第四次', v4, d4)
+
+let curDone1 = false;
+let curValue1 = undefined;
+while (!curDone1) {
+    const { value, done } = it.next(curValue1)
+    console.log('自己写的-while循环内的：', value, done)
+    curValue1 = value
+    curDone1 = done
+}
 // ======================用于测试和验证-结束======================
+
+
+
+// ======================4.generator的应用及其源码======================
+// 目标：throughThisToReadFile.txt解析出a.txt，再解析出aaaaa
+const fs = require('fs')
+const util = require('util')
+const readFile = util.promisify(fs.readFile)
+
+function* readDoubleFile() {
+    const data = yield readFile('./promise/example/throughThisToReadFile.txt', 'utf8')
+    const finalData = yield readFile(`./promise/example/${data}`, 'utf8')
+    console.log('生成器里面的finalData', finalData)
+}
+const itOfReadDoubleFile = readDoubleFile()
+
+
+// 写法1：最朴素的写法，直接用next硬生生写
+// 两个yield，用三个next可以解决完毕。
+// const { value: promise1 } = itOfReadDoubleFile.next() // 拿到第一个promise
+// promise1.then((data) => {
+//     const { value: promise2 } = itOfReadDoubleFile.next(data)
+//     promise2.then((data) => {
+//         // 最后这个返回值是没有意义的，因为此时此刻已经执行完函数了，返回的return自然是undefined
+//         const { value } = itOfReadDoubleFile.next(data)
+//     })
+// })
+
+
+
+// 写法2：用一个promise解决完所有，利用co库的原理
+function co(iterator) {
+    // 返回一个大的promise
+    return new Promise((resolve, reject) => {
+        try {
+            const next = (nextValue) => {
+                // 立刻执行next
+                const { value, done } = iterator.next(nextValue)
+                // 没完成就递归，已经完成了就直接resolve外层的大promise
+                if (!done) {
+                    // 这里一定要Promise.resolve(value).then()之后才递归，用于处理value是promise或非promise的情况
+                    Promise.resolve(value).then((data) => next(data), (err) => reject(err))
+                } else {
+                    resolve(value)
+                }
+            }
+            // 先立刻执行一次
+            next()
+        } catch (err) {
+            reject(err)
+        }
+    })
+}
+co(itOfReadDoubleFile).then((finalData) => {
+    console.log('利用co得到的最后的解析数据: ', finalData)
+})
+
+
+
+
+
 
 
 

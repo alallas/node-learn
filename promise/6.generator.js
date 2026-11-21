@@ -32,7 +32,7 @@ console.log('第二次', value2, done2)
 const { value: value3, done: done3 } = iterator.next(value2) // 得到的value3就是3，传递给下面第四次，使得c为3
 console.log('第三次', value3, done3)
 
-// 第四次开始执行，执行的是：const c = 和 console.log(c)
+// 第四次开始执行，执行的是：const c = 和 console.log(c) 和 return c
 const { value: value4, done: done4 } = iterator.next(value3) // 得到的value4是3，即为生成器返回的值，done为true
 console.log('第四次', value4, done4)
 
@@ -64,8 +64,10 @@ const iteratorFactory = {
             // 用户给next传入的参数，即yield的接受值者的值，存在这里
             sent: undefined,
             // 结束调度
-            stop() {
+            stop(finalValue) {
+                this.sent = finalValue
                 this.done = true
+                return finalValue
             }
         }
         const iterator = {
@@ -114,20 +116,15 @@ function iteratorGenerator() {
                     context.next = 9
                     return 3
 
-                // 第四次开始执行，执行的是：const c = 和 console.log(c)
+                // 第四次开始执行，执行的是：const c = 和 console.log(c) 和 return c
+                // 这一次有return，就算结束！
                 case 9:
                     // 为yield的接受值者赋值
                     const c = context.sent
                     // 执行用户函数
                     console.log(c)
-                    // 开始往下走
-                    context.next = 12
-                    return c
-
-                // 结束的时候，调用stop，表示done被赋值为true
-                case 12:
-                case 'end':
-                    return context.stop()
+                    // 调用stop，表示done被赋值为true
+                    return context.stop(c)
             }
         }
     })
@@ -230,8 +227,8 @@ async function readDoubleFile2() {
     const res1 = await readFile('./promise/example/throughThisToReadFile.txt', 'utf8')
     const finalData = await readFile(`./promise/example/${res1}`, 'utf8')
     const otherData = await 1000
-    console.log('用async和await写的，最终获取到的finalData', finalData)
-    console.log('用async和await写的，await常量的测试', otherData)
+    console.log('用async和await写的，最终获取到的finalData：', finalData)
+    console.log('用async和await写的，await常量的测试：', otherData)
     return finalData
 }
 readDoubleFile2()
@@ -276,8 +273,10 @@ const iteratorFactory_async = {
             // 用户给next传入的参数，即yield的接受值者的值，存在这里
             sent: undefined,
             // 结束调度
-            stop() {
+            stop(finalValue) {
+                this.sent = finalValue
                 this.done = true
+                return finalValue
             }
         }
         const iterator = {
@@ -313,13 +312,9 @@ const iteratorGenerator_async = () => {
                     return 1000;
                 case 6:
                     const otherData = context.sent
-                    console.log('用async和await写的，最终获取到的finalData', finalData)
-                    console.log('用async和await写的，await常量的测试', otherData)
-                    context.next = 8;
-                    return finalData;
-                case 8:
-                case 'end':
-                    context.stop()
+                    console.log('手写版本-用async和await写的，最终获取到的finalData：', finalData)
+                    console.log('手写版本-用async和await写的，await常量的测试：', otherData)
+                    return context.stop(finalData)
             }
         }
     })
@@ -327,10 +322,10 @@ const iteratorGenerator_async = () => {
 
 // 最后async函数会变成一个promise，里面的await其实就是yield
 function readDoubleFile2_async() {
-    const async = asyncGenerator(iteratorGenerator_async)
-    return async()
+    const asyncFactory = asyncGenerator(iteratorGenerator_async)
+    return asyncFactory()
 }
-
+readDoubleFile2_async()
 
 
 

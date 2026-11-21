@@ -476,7 +476,7 @@ Promise.race([
 
 
 // ================3.promise及其方法的应用================
-// race是用来写请求超时的好方法，但是只是取了快的那个结果，而不是真正取消请求
+// 3.1 race是用来写请求超时的好方法，但是只是取了快的那个结果，而不是真正取消请求
 const promise3 = new Promise((resolve) => {
     setTimeout(() => {
         resolve('请求后得到的数据')
@@ -494,7 +494,7 @@ Promise.race([promise3, timeoutPromise]).then((data) => {
 })
 
 
-// 让node的一些方法改成then的调用方式，防止回调嵌套，比如fs.readFile('', '', (err, data) => fs.readFile(data, '', () => { console.log(‘获得数据’) }))
+// 3.2 让node的一些方法改成then的调用方式，防止回调嵌套，比如fs.readFile('', '', (err, data) => fs.readFile(data, '', () => { console.log(‘获得数据’) }))
 // 一般第三个参数的回调的入参都是(name, parseMethod, callback)
 // 1、简单的形式
 const fs = require('fs')

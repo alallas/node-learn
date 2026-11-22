@@ -9,21 +9,51 @@
 const c1 = process.platform
 console.log('process的platform：', c1) // win32
 
-// 获取当前调用node文件的根目录
+// 获取当前调用node文件的根目录，是动态会变的
 const c2 = process.cwd()
 console.log('process的cwd：', c2) // d:\Repos\node-learn
 
 // 获取环境变量
-// 在调用的时候定义变量的值，比如
+// 在执行代码的时候定义变量的值，命令为：
 // cmd：set NODE_ENV=production && node promise/7.node模块.js
 // powershell：$env:NODE_ENV="production"; node promise/7.node模块.js
 // bash：NODE_ENV=production node promise/7.node模块.js
 const c3 = process.env.NODE_ENV
-console.log('process的env：', c3) // d:\Repos\node-learn
+console.log('process的env：', c3) // production
 
+// 获取代码执行的时候传入的参数
+// 命令为node promise/7.node模块.js --port 3000 --env dev
+const c4 = process.argv
+console.log('process的argv：', c4)
+/*
+得到的值如下：
+[
+    'D:\\nvm4w\\nodejs\\node.exe',                         // 这里固定是：Node可执行文件的路径
+    'D:\\Repos\\node-learn\\promise\\7.node模块.js',       // 这里固定是：被执行脚本的路径
+    '--port',                                              // 这里开始是自己传入的参数 
+    '3000',
+    '--env',
+    'dev'
+]
+*/
+// 一般这么使用：
+const c5 = process.argv.slice(2); // ['--port', '3000', '--env', 'dev']
+console.log('process的argv进行去除固定值之后：', c5)
+// 整合到对象里面：
+const processArgvs = process.argv.reduce((previousValue, currentValue, currentIndex, array) => {
+    if (currentIndex <= 1) return previousValue
+    if (currentValue.startsWith('--')) {
+        previousValue[currentValue.slice(2)] = array[currentIndex + 1]
+    }
+    return previousValue
+}, {})
+console.log('process的argv整合到对象里面：', processArgvs)
 
-
-
+// 微任务
+// 不属于node中的EventLoop，优先级比promise更高
+process.nextTick(() => {
+    console.log('process的nextTick，属于微任务，优先级比promise更高')
+})
 
 
 
@@ -125,6 +155,17 @@ vm.runInNewContext('try { console.log("vm.runInNewContext: ", global) } catch(er
 
 
 // ============2.4 ejs模块============
+const ejs = require('ejs');
+
+// ejs用于给html动态注入参数（目标html用<%  %>来包裹代码）
+(async function () {
+    const str = await ejs.renderFile('./promise/example/template.html', { arr: [1, 2, 3] })
+    console.log(str)
+})()
+
+
+
+// ============2.5 events模块============
 
 
 
@@ -132,12 +173,16 @@ vm.runInNewContext('try { console.log("vm.runInNewContext: ", global) } catch(er
 
 
 
-
-
-
-
-
 // ======================4.第三方模块（需要手动安装的模块）======================
+
+
+
+// ======================5.模块规范（模块之间如何相互引用）======================
+
+
+
+
+
 
 
 

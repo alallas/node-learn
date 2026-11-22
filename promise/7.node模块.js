@@ -374,15 +374,17 @@ class Module {
         this.exports = {}
     }
 
+    // 缓存
     static cache = {}
 
+    // 不同模块的加载策略
     static loadStrategy = {
         '.js'(module) {
             const content = fs.readFileSync(module.id, 'utf8')
             // 包裹一层函数壳子，提供五个参数
-            const script = `function(module, exports, require, __dirname, __filename){${content}}`
+            const script = `(function(module, exports, require, __dirname, __filename){${content}})`
             // 然后创建一个沙盒环境，保证不污染其他文件模块
-            const fn = vm.runInThisContect(script)
+            const fn = vm.runInThisContext(script)
             // 构造五个入参，其中exports传入的是中间变量，因此不能用exports = xxx来导出
             const exports = module.exports
             // this指的是module.exports。Q：为啥this不指向module，而是exports
@@ -399,19 +401,25 @@ class Module {
             module.exports = JSON.parse(content)
         }
     }
-    static resolvePathname(path) {
-        const resolvedPath = path.resolve(__dirname, path)
+    static resolvePathname(relativePath) {
+        // 转化为绝对路径
+        const resolvedPath = path.resolve(__dirname, relativePath)
         if (fs.existsSync(resolvedPath)) return resolvedPath
+
+        // 加上后缀找文件
+        // this.constructor.loadStrategy等价于Module.loadStrategy（this.constructor是实例的一个隐藏属性，指向创建它的类）
         const keys = Object.keys(this.constructor.loadStrategy)
         for (let i = 0; i < keys.length; i++) {
             const addedPath = resolvedPath + keys[i]
             if (fs.existsSync(addedPath)) return addedPath
         }
-        throw new Error('没有找到此路径：', path)
+        throw new Error('没有找到此路径：', relativePath)
     }
 
     load() {
+        // 解析后缀
         const ext = path.extname(this.id)
+        // 找策略函数执行
         const strategy = this.constructor.loadStrategy[ext]
         if (strategy) {
             strategy(this)
@@ -420,9 +428,9 @@ class Module {
 }
 
 
-function require_self(path) {
+function require_self(relativePath) {
     // 把相对路径转化成绝对路径
-    const resolvedPath = Module.resolvePathname(path)
+    const resolvedPath = Module.resolvePathname(relativePath)
 
     // 先找缓存（目的是防止一个文件内多次require同一个模块）
     const cachedModule = Module.cache[resolvedPath]
@@ -438,9 +446,13 @@ function require_self(path) {
     // 返回被赋值的exports
     return newModule.exports
 }
-const moduleINeed = require('./promise/example/index.js')
-console.log('模块规范，引入我想要的模块', moduleINeed)
 
+// 测试
+const moduleINeedUsedRequire_self = require_self('./example/index')
+console.log('模块规范，引入我想要的模块', moduleINeedUsedRequire_self)
+
+const moduleINeedUsedRequire = require('./example/index.js')
+console.log('模块规范，引入我想要的模块', moduleINeedUsedRequire)
 
 
 

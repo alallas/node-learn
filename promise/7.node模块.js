@@ -385,7 +385,8 @@ class Module {
             const script = `(function(module, exports, require, __dirname, __filename){${content}})`
             // 然后创建一个沙盒环境，保证不污染其他文件模块
             const fn = vm.runInThisContext(script)
-            // 构造五个入参，其中exports传入的是中间变量，因此不能用exports = xxx来导出
+            // 构造五个入参：
+            // 其中exports传入的是中间变量，因此不能用exports = xxx来导出，但是可以用exports.b = '222'来增加属性
             const exports = module.exports
             // this指的是module.exports。Q：为啥this不指向module，而是exports
             const thisValue = exports
@@ -407,8 +408,8 @@ class Module {
         if (fs.existsSync(resolvedPath)) return resolvedPath
 
         // 加上后缀找文件
-        // this.constructor.loadStrategy等价于Module.loadStrategy（this.constructor是实例的一个隐藏属性，指向创建它的类）
-        const keys = Object.keys(this.constructor.loadStrategy)
+        // 在静态方法里面，this指向类本身，因此可以写作this.loadStrategy
+        const keys = Object.keys(this.loadStrategy)
         for (let i = 0; i < keys.length; i++) {
             const addedPath = resolvedPath + keys[i]
             if (fs.existsSync(addedPath)) return addedPath
@@ -420,6 +421,8 @@ class Module {
         // 解析后缀
         const ext = path.extname(this.id)
         // 找策略函数执行
+        // 在实例方法里面，this指向实例本身，此时this.constructor指向类本身，因此可以写作this.constructor.loadStrategy
+        // 等价于Module.loadStrategy（this.constructor是实例的一个隐藏属性，指向创建它的类）
         const strategy = this.constructor.loadStrategy[ext]
         if (strategy) {
             strategy(this)
@@ -449,12 +452,25 @@ function require_self(relativePath) {
 
 // 测试
 const moduleINeedUsedRequire_self = require_self('./example/index')
-console.log('模块规范，引入我想要的模块', moduleINeedUsedRequire_self)
+console.log('手写的模块规范require，引入我想要的模块', moduleINeedUsedRequire_self)
 
 const moduleINeedUsedRequire = require('./example/index.js')
-console.log('模块规范，引入我想要的模块', moduleINeedUsedRequire)
+console.log('官方模块规范require，引入我想要的模块', moduleINeedUsedRequire)
 
+// 关于被引入的文件模块：
+// 这样写导出之后还是只有acd属性，因为把module.exports覆盖了
+// exports.b = '222'
+// module.exports = {
+//     a: '111',
+//     c: __dirname,
+//     d: __filename
+// }
 
+// 可以这么写：
+exports.b = '222'
+module.exports.a = __dirname
+module.exports.thisValue = JSON.stringify(this)
+module.exports.checkIsThisEqualExports = this === module.exports
 
 
 

@@ -468,9 +468,12 @@ console.log('官方模块规范require，引入我想要的模块', moduleINeedU
 
 // 可以这么写：
 exports.b = '222'
-module.exports.a = __dirname
+module.exports.dirname = __dirname
+module.exports.filename = __filename
 module.exports.thisValue = JSON.stringify(this)
-module.exports.checkIsThisEqualExports = this === module.exports
+module.exports.checkIsThisEqualExports = this === exports
+module.exports.checkIsThisEqualModuleExports = this === module.exports
+this.a = '111'
 
 
 

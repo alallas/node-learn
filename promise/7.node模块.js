@@ -154,14 +154,6 @@ vm.runInNewContext('try { console.log("vm.runInNewContext: ", global) } catch(er
 
 
 
-// ============2.4 ejs模块============
-const ejs = require('ejs');
-
-// ejs用于给html动态注入参数（目标html用<%  %>来包裹代码）
-(async function () {
-    const str = await ejs.renderFile('./promise/example/template.html', { arr: [1, 2, 3] })
-    console.log(str)
-})()
 
 
 
@@ -174,7 +166,80 @@ const ejs = require('ejs');
 
 
 // ======================4.第三方模块（需要手动安装的模块）======================
+// ============4.1 ejs模块============
+const ejs = require('ejs');
 
+// ejs用于给html动态注入参数（目标html用<%  %>来包裹代码）
+(async function () {
+    const str = await ejs.renderFile('./promise/example/template.html', { arr: [1, 2, 3], title: 'ejs的html' })
+    console.log('ejs生成的模板：', str)
+})()
+
+// ejs的原理如下，核心是用new Function 和 with 实现
+// （1）我们先来看with部分，看下面的函数，核心是“字符串拼接”
+// （with的作用是：把对象 obj 临时挂到作用域链最前面，让代码块里的变量名可以直接读写对象的属性，不用写obj.前缀。）
+function generateHtmlString(obj) {
+    let str = ''
+    with (obj) {
+        // 一种写法：模板字符串
+        str = `<!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <title>${title}</title>
+                </head>
+                <body>
+                    ${arr.map(item => `<li>${item}</li>`).join('\n')}
+                </body>
+                </html>`
+
+        // 另一种写法：拼接字符串
+        // str += `<!DOCTYPE html>
+        //         <html lang="en">
+        //         <head>
+        //         <title>`
+        // str += title
+        // str += `</title>
+        //         </head>
+        //         <body>`
+        // arr.forEach((item) => {
+        //     str += `<li>${item}</li>`
+        // })
+        // str += `</body>
+        //         </html>`
+    }
+    return str
+}
+console.log(generateHtmlString({ arr: [1, 2, 3], title: '手写with的html' }))
+
+// （2）真正的核心源码，字符串拼接加上new Functio
+// 为啥在ejs里面必须要用with？
+// 因为ejs是靠正则识别变量，但是无法确定变量的形式（比如是单个变量还是<%=a+b%>这种复合变量的形式），需要借助with来不写前缀就拿到变量。
+// 如果确定是当个变量，可以在拼接字符串的时候加上obj.，比如str.replace(/<%=/s*(.+?)%>/g, (match, expr) => '${obj.' + expr + '}')
+const util = require('util')
+const readFileAsync = util.promisify(fs.readFile)
+const ejs_self = {
+    renderFile: async function(filename, obj) {
+        // 读取文件
+        let content = await readFileAsync(filename, 'utf8')
+        // 先把=开头的变量替换掉
+        content = content.replace(/<%=\s*(.+?)%>/g, (match, expr) => '${' + expr + '}')
+        // 然后把代码替换掉
+        content = content.replace(/<%\s*(.+?)%>/g, (match, expr) => '`' + expr + 'str += `')
+        // 构造头部
+        const head = 'let str = ``; with (obj) { str += `'
+        // 构造尾部
+        const tail = '`} return str'
+
+        // 核心：用new FUnction来构造模板函数
+        const fn = new Function('obj', head + content + tail)
+        return fn(obj)
+    }
+}
+// 验证下
+(async function () {
+    const str = await ejs_self.renderFile('./promise/example/template.html', { arr: [1, 2, 3], title: 'ejs的html' })
+    console.log('手写的ejs生成的模板：', str)
+})()
 
 
 // ======================5.模块规范（模块之间如何相互引用）======================

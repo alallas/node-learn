@@ -154,10 +154,105 @@ vm.runInNewContext('try { console.log("vm.runInNewContext: ", global) } catch(er
 
 
 
+// ============2.4 events模块============
+const EventEmitter = require('events')
+
+// 发布订阅模式，可以给每个订阅函数归类分组，按组触发
+const event = new EventEmitter()
+
+// 订阅函数
+// 多个函数归为一组
+event.on('category1', (...args) => {
+    console.log('event触发-category1第一次：', args)
+})
+event.on('category1', (...args) => {
+    console.log('event触发-category1第二次：', args)
+})
+// 可以订阅，也可以取消订阅，需要指定“和订阅函数一样”的函数入参
+const eventCategory2Fn = (...args) => {
+    console.log('event触发-category2：', args)
+}
+event.on('category2', eventCategory2Fn)
+
+// 只订阅一次，触发过一次之后，再次emit无效果
+event.once('category3', (...args) => {
+    console.log('event触发-category3：', args)
+})
+
+// 触发函数
+event.emit('category1', 1, 2, 3)
+
+// 取消订阅之后，再次emit无效果
+event.emit('category2', 4, '5')
+event.off('category2', eventCategory2Fn)
+event.emit('category2')
+
+// once触发过一次之后，再次emit无效果
+event.emit('category3', 4, 5, 6)
+event.emit('category3', 4, 5, 6)
 
 
+// EventEmitter的源码如下，本质上是发布订阅函数
+class EventEmitter_self {
+    events = {}
 
-// ============2.5 events模块============
+    on(category, callback) {
+        const cbsOfCategory = this.events[category];
+        if (cbsOfCategory) {
+            cbsOfCategory.push(callback)
+        } else {
+            this.events[category] = [callback]
+        }
+    }
+    emit(category, ...args) {
+        const cbsOfCategory = this.events[category];
+        if (cbsOfCategory) {
+            cbsOfCategory.forEach((cb) => {
+                cb(...args)
+            })
+        }
+    }
+    off(category, callback) {
+        // 取消订阅的时候，对比的回调是浅对比（===对比），也就是对比内存地址
+        const cbsOfCategory = this.events[category];
+        if (cbsOfCategory) {
+            this.events[category] = cbsOfCategory.filter((cb) => cb !== callback)
+        }
+    }
+    once(category, callback) {
+        // 自己包裹一个函数，加一些逻辑，保证执行外部指定的函数之后，取消订阅
+        const formattedCallback = (...args) => {
+            callback(...args)
+            // 这里能够确保取消订阅成功，因为on和off传入的是同一个内存地址的函数
+            this.off(category, formattedCallback)
+        }
+        this.on(category, formattedCallback)
+    }
+}
+
+// 开始测试
+const event_self = new EventEmitter_self()
+event_self.on('category1', (...args) => {
+    console.log('手写的event触发-category1第一次：', args)
+})
+event_self.on('category1', (...args) => {
+    console.log('手写的event触发-category1第二次：', args)
+})
+const eventCategory2Fn_self = (...args) => {
+    console.log('手写的event触发-category2：', args)
+}
+event_self.on('category2', eventCategory2Fn_self)
+event_self.once('category3', (...args) => {
+    console.log('手写的event触发-category3：', args)
+})
+
+event_self.emit('category1', 1, 2, 3)
+event_self.emit('category2', 4, '5')
+event_self.off('category2', eventCategory2Fn_self)
+event_self.emit('category2')
+event_self.emit('category3', 4, 5, 6)
+event_self.emit('category3', 4, 5, 6)
+// 结束测试
 
 
 
@@ -218,23 +313,23 @@ console.log(generateHtmlString({ arr: [1, 2, 3], title: '手写with的html' }))
 const util = require('util')
 const readFileAsync = util.promisify(fs.readFile)
 const ejs_self = {
-    renderFile: async function(filename, obj) {
+    renderFile: async function (filename, obj) {
         // 读取文件
         let content = await readFileAsync(filename, 'utf8')
-        // 先把=开头的变量替换掉
+        // 先把<%= %>即=开头的变量替换掉
         content = content.replace(/<%=\s*(.+?)%>/g, (match, expr) => '${' + expr + '}')
-        // 然后把代码替换掉
-        content = content.replace(/<%\s*(.+?)%>/g, (match, expr) => '`' + expr + 'str += `')
+        // 然后把<% %>部分代码替换掉
+        content = content.replace(/<%\s*(.+?)%>/g, (match, expr) => '`; \n' + expr + '; \n str += `')
         // 构造头部
-        const head = 'let str = ``; with (obj) { str += `'
+        const head = 'let str = ``; \n with (obj) { \n str += `'
         // 构造尾部
-        const tail = '`} return str'
+        const tail = '`; \n }; \n return str;'
 
         // 核心：用new FUnction来构造模板函数
         const fn = new Function('obj', head + content + tail)
         return fn(obj)
     }
-}
+};
 // 验证下
 (async function () {
     const str = await ejs_self.renderFile('./promise/example/template.html', { arr: [1, 2, 3], title: 'ejs的html' })
@@ -243,6 +338,108 @@ const ejs_self = {
 
 
 // ======================5.模块规范（模块之间如何相互引用）======================
+
+// 为啥有模块规范？
+// 为了解决命名冲突的问题，用文件拆分的方式，配合iife子执行函数来解决
+
+// 几大模块规范为：systemjs、amd、cmd、commonjs、umd、esm
+// amd和cmd是早期规范，commonjs是后来提出的，umd是兼容amd、cmd、commonjs的规范
+
+// commonJs规范(基于fs的readFile实现的，在需要模块的时候进行文件读取，是动态的，即可以有判断条件)：
+// 1、一个文件是一个模块
+// 2、引用其他模块使用require('xxx')
+// 3、导出自己的模块使用module.exports = xxx
+
+// esModule规范（每次引用一个模块都发出一个请求，通过webpack或vite的打包工具来实现，是静态的，即不能有判断条件需要预先定义好）：
+// 1、一个文件是一个模块
+// 2、引用其他模块使用import 'xxx'
+// 3、导出自己的模块使用export xxx，或者export default xxx
+
+
+// 【因此esm模块可以进行treeShaking而commonJs不能，静态的预先编译好的可以去除没有被使用的模块，动态的无法判断哪些可以去除】
+
+
+
+// require的原理：
+// 先把文件路径拼成绝对路径（期间会试图修复文件路径，加上后缀）
+// 新建一个Module的实例，id就是文件的绝对路径
+// 调用module.load加载模块，用策略模式，按照文件后缀进行加载
+// js文件则使用readFileSync同步读文件，然后包裹函数壳子，创造new Function
+// 执行这个function实例，this就是module.exports，得到人家文件导出的module.exports，返回来
+
+
+class Module {
+    constructor(id) {
+        this.id = id
+        this.exports = {}
+    }
+
+    static cache = {}
+
+    static loadStrategy = {
+        '.js'(module) {
+            const content = fs.readFileSync(module.id, 'utf8')
+            // 包裹一层函数壳子，提供五个参数
+            const script = `function(module, exports, require, __dirname, __filename){${content}}`
+            // 然后创建一个沙盒环境，保证不污染其他文件模块
+            const fn = vm.runInThisContect(script)
+            // 构造五个入参，其中exports传入的是中间变量，因此不能用exports = xxx来导出
+            const exports = module.exports
+            // this指的是module.exports。Q：为啥this不指向module，而是exports
+            const thisValue = exports
+            const filename = module.id
+            const dirname = path.dirname(filename)
+
+            // 调用函数，每个文件内部会把自己想要导出的东西放在这个模块的exports里面
+            fn.call(thisValue, module, exports, require_self, dirname, filename)
+
+        },
+        '.json'(module) {
+            const content = fs.readFileSync(module.id, 'utf8')
+            module.exports = JSON.parse(content)
+        }
+    }
+    static resolvePathname(path) {
+        const resolvedPath = path.resolve(__dirname, path)
+        if (fs.existsSync(resolvedPath)) return resolvedPath
+        const keys = Object.keys(this.constructor.loadStrategy)
+        for (let i = 0; i < keys.length; i++) {
+            const addedPath = resolvedPath + keys[i]
+            if (fs.existsSync(addedPath)) return addedPath
+        }
+        throw new Error('没有找到此路径：', path)
+    }
+
+    load() {
+        const ext = path.extname(this.id)
+        const strategy = this.constructor.loadStrategy[ext]
+        if (strategy) {
+            strategy(this)
+        }
+    }
+}
+
+
+function require_self(path) {
+    // 把相对路径转化成绝对路径
+    const resolvedPath = Module.resolvePathname(path)
+
+    // 先找缓存（目的是防止一个文件内多次require同一个模块）
+    const cachedModule = Module.cache[resolvedPath]
+    if (cachedModule) return cachedModule.exports
+
+    // 没有缓存才建立一个新的文件模块
+    const newModule = new Module(resolvedPath)
+    // 存入缓存
+    Module.cache[resolvedPath] = newModule
+
+    // 会调用引入的文件模块函数，使得module.exports被赋值了
+    newModule.load()
+    // 返回被赋值的exports
+    return newModule.exports
+}
+const moduleINeed = require('./promise/example/index.js')
+console.log('模块规范，引入我想要的模块', moduleINeed)
 
 
 

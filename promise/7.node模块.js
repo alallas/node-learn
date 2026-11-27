@@ -102,7 +102,7 @@ console.log('basename没有自带扩展名: ', a10)
 // ============2.2 fs模块============
 const fs = require('fs')
 
-// 读文件
+// 读文件(一次性读，而不是流式读)
 // 异步的
 fs.readFile('./promise/example/throughThisToReadFile.txt', 'utf8', (err, data) => {
     console.log('fs.readFile异步的读文件：', data)
@@ -111,7 +111,7 @@ fs.readFile('./promise/example/throughThisToReadFile.txt', 'utf8', (err, data) =
 const b1 = fs.readFileSync('./promise/example/throughThisToReadFile.txt', 'utf8')
 console.log('fs.readFile同步的读文件：', b1)
 
-// 写文件
+// 写文件(一次性写，而不是流式写)
 // 异步的
 fs.writeFile('./promise/example/c.txt', '要写入的内容', 'utf8', (err, data) => {
     if (err) {
